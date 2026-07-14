@@ -13,7 +13,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { CheckCircle2, ClipboardList, Gauge, Timer } from "lucide-react";
+import { CheckCircle2, ClipboardList, Gauge, Target, Timer } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ensureSeeded, getAnalytics } from "@/lib/mock-api";
@@ -78,7 +78,7 @@ function AnalyticsPage() {
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard
           icon={<ClipboardList className="h-4 w-4" />}
           label="Total Complaints"
@@ -88,6 +88,12 @@ function AnalyticsPage() {
           icon={<CheckCircle2 className="h-4 w-4" />}
           label="Auto-Approved"
           value={data ? `${data.autoApprovedPct}%` : "—"}
+          tone="success"
+        />
+        <StatCard
+          icon={<Target className="h-4 w-4" />}
+          label="Classification Accuracy"
+          value={data ? `${Math.round(data.averageAccuracy * 100)}%` : "—"}
           tone="success"
         />
         <StatCard
