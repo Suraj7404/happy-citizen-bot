@@ -188,7 +188,118 @@ function AnalyticsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {data && <ConfusionMatrixCard data={data} />}
     </div>
+  );
+}
+
+function ConfusionMatrixCard({ data }: { data: AnalyticsSnapshot }) {
+  const { labels, matrix } = data.confusion;
+  const rowTotals = matrix.map((row) => row.reduce((s, v) => s + v, 0));
+  const max = Math.max(1, ...matrix.flat());
+
+  const shortLabel = (l: string) =>
+    l
+      .replace(/&/g, "&")
+      .split(" ")
+      .map((w) => (w.length > 4 ? w.slice(0, 4) : w))
+      .join(" ");
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Confusion Matrix</CardTitle>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Rows are true categories, columns are predicted. Diagonal cells are correct
+          classifications; darker cells indicate higher counts.
+        </p>
+      </CardHeader>
+      <CardContent className="overflow-x-auto">
+        <table className="w-full border-collapse text-xs">
+          <thead>
+            <tr>
+              <th className="sticky left-0 z-10 bg-card p-2 text-left font-medium text-muted-foreground">
+                True ↓ / Pred →
+              </th>
+              {labels.map((l) => (
+                <th
+                  key={l}
+                  className="p-2 text-center font-medium text-muted-foreground"
+                  title={l}
+                >
+                  <div className="mx-auto max-w-[72px] leading-tight">{shortLabel(l)}</div>
+                </th>
+              ))}
+              <th className="p-2 text-center font-medium text-muted-foreground">Recall</th>
+            </tr>
+          </thead>
+          <tbody>
+            {labels.map((rowLabel, r) => {
+              const total = rowTotals[r];
+              const correct = matrix[r][r];
+              const recall = total === 0 ? 0 : Math.round((correct / total) * 100);
+              return (
+                <tr key={rowLabel}>
+                  <th
+                    className="sticky left-0 z-10 bg-card p-2 text-left font-medium text-foreground"
+                    title={rowLabel}
+                  >
+                    <div className="max-w-[160px] truncate">{rowLabel}</div>
+                  </th>
+                  {labels.map((colLabel, c) => {
+                    const v = matrix[r][c];
+                    const intensity = v === 0 ? 0 : 0.12 + (v / max) * 0.78;
+                    const diag = r === c;
+                    const bg = diag
+                      ? `color-mix(in oklch, var(--success) ${Math.round(intensity * 100)}%, transparent)`
+                      : `color-mix(in oklch, var(--destructive) ${Math.round(intensity * 100)}%, transparent)`;
+                    return (
+                      <td
+                        key={colLabel}
+                        className="border border-border p-0 text-center"
+                        title={`True: ${rowLabel} · Pred: ${colLabel} · ${v}`}
+                      >
+                        <div
+                          className="grid h-10 w-full place-items-center font-mono text-xs"
+                          style={{ background: bg }}
+                        >
+                          <span
+                            className={
+                              v === 0
+                                ? "text-muted-foreground"
+                                : intensity > 0.55
+                                  ? "font-semibold text-foreground"
+                                  : "text-foreground/80"
+                            }
+                          >
+                            {v}
+                          </span>
+                        </div>
+                      </td>
+                    );
+                  })}
+                  <td className="border border-border p-2 text-center font-mono text-xs text-muted-foreground">
+                    {total === 0 ? "—" : `${recall}%`}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        <div className="mt-4 flex items-center gap-4 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <span className="inline-block h-3 w-6 rounded-sm bg-success/60" />
+            Correct (diagonal)
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="inline-block h-3 w-6 rounded-sm bg-destructive/50" />
+            Misclassified
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
