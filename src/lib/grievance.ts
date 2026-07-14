@@ -116,6 +116,7 @@ export interface AnalyticsSnapshot {
   totalComplaints: number;
   autoApprovedPct: number;
   averageConfidence: number;
+  averageAccuracy: number; // 0..1, classifier accuracy vs. reviewed ground truth
   averageSlaDays: number;
   perCategory: { category: string; count: number }[];
   priorityDistribution: { name: Priority; value: number }[];
