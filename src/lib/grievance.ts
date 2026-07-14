@@ -120,6 +120,10 @@ export interface AnalyticsSnapshot {
   averageSlaDays: number;
   perCategory: { category: string; count: number }[];
   priorityDistribution: { name: Priority; value: number }[];
+  confusion: {
+    labels: Category[];
+    matrix: number[][]; // matrix[trueIdx][predictedIdx]
+  };
 }
 
 export function priorityToneClass(priority: Priority): string {
