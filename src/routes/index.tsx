@@ -5,10 +5,12 @@ import {
   Building2,
   CheckCircle2,
   ClipboardList,
+  FileSpreadsheet,
   Loader2,
   Send,
   ShieldAlert,
   Sparkles,
+  Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -18,12 +20,22 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   CONFIDENCE_THRESHOLD,
   DEPARTMENT_MAP,
   RESOLUTION_STEPS,
   priorityToneClass,
   type AuditRecord,
+  type Category,
   type ClassifyResponse,
+  type Priority,
   type ReviewItem,
 } from "@/lib/grievance";
 import { classifyComplaint, ensureSeeded } from "@/lib/mock-api";
@@ -211,7 +223,236 @@ function SubmitComplaintPage() {
           </CardContent>
         </Card>
       )}
+
+      <BatchClassifyCard />
     </div>
+  );
+}
+
+interface BatchRow {
+  complaintText: string;
+  category: Category;
+  priority: Priority;
+  confidence: number;
+  routing: "AUTO-APPROVED" | "HUMAN-REVIEW";
+  department: string;
+}
+
+function BatchClassifyCard() {
+  const [batchText, setBatchText] = useState("");
+  const [rows, setRows] = useState<BatchRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  function parseComplaints(raw: string): string[] {
+    return raw
+      .split(/\r?\n/)
+      .map((l) => l.replace(/^\s*"|"\s*$/g, "").trim())
+      .filter((l) => l.length > 0);
+  }
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const content = await file.text();
+    setBatchText(content);
+    e.target.value = "";
+  }
+
+  async function runBatch() {
+    const items = parseComplaints(batchText);
+    if (items.length === 0) {
+      toast.error("No complaints found. Paste one complaint per line.");
+      return;
+    }
+    setLoading(true);
+    setRows([]);
+    setProgress(0);
+    const out: BatchRow[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const text = items[i];
+      const { classification } = await classifyComplaint(text);
+      const routing: BatchRow["routing"] =
+        classification.confidence >= CONFIDENCE_THRESHOLD ? "AUTO-APPROVED" : "HUMAN-REVIEW";
+      out.push({
+        complaintText: text,
+        category: classification.category,
+        priority: classification.priority,
+        confidence: classification.confidence,
+        routing,
+        department: DEPARTMENT_MAP[classification.category].department,
+      });
+      setProgress(Math.round(((i + 1) / items.length) * 100));
+    }
+    setRows(out);
+    setLoading(false);
+    const flagged = out.filter((r) => r.routing === "HUMAN-REVIEW").length;
+    toast.success(
+      `Classified ${out.length} complaint${out.length === 1 ? "" : "s"} · ${flagged} flagged for review`,
+    );
+  }
+
+  function downloadCsv() {
+    const header = ["complaint", "category", "priority", "confidence", "routing", "department"];
+    const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
+    const lines = [
+      header.join(","),
+      ...rows.map((r) =>
+        [
+          escape(r.complaintText),
+          escape(r.category),
+          escape(r.priority),
+          r.confidence.toFixed(3),
+          escape(r.routing),
+          escape(r.department),
+        ].join(","),
+      ),
+    ];
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `grievance-batch-${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const flaggedCount = rows.filter((r) => r.routing === "HUMAN-REVIEW").length;
+  const approvedCount = rows.length - flaggedCount;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <FileSpreadsheet className="h-5 w-5 text-primary" />
+          Batch Classify Dataset
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Paste multiple complaints (one per line) or upload a .txt / .csv file. Each row is
+          classified, routed, and logged to the audit trail.
+        </p>
+        <Textarea
+          value={batchText}
+          onChange={(e) => setBatchText(e.target.value)}
+          placeholder={"My pension has not been credited for 3 months\nStreetlights on MG Road are broken\nITR refund still pending for July filing"}
+          rows={6}
+          className="resize-none font-mono text-xs"
+          aria-label="Batch complaints"
+        />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-muted/50 px-3 py-1.5 text-xs font-medium text-foreground/80 hover:bg-muted">
+              <Upload className="h-3.5 w-3.5" />
+              Upload .txt / .csv
+              <input
+                type="file"
+                accept=".txt,.csv,text/plain,text/csv"
+                className="hidden"
+                onChange={handleFile}
+              />
+            </label>
+            <span className="text-xs text-muted-foreground">
+              {parseComplaints(batchText).length} complaint(s) detected
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            {rows.length > 0 && (
+              <Button type="button" variant="outline" size="sm" onClick={downloadCsv}>
+                Export CSV
+              </Button>
+            )}
+            <Button
+              type="button"
+              onClick={runBatch}
+              disabled={loading || !batchText.trim()}
+              className="gap-2"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              Classify Batch
+            </Button>
+          </div>
+        </div>
+
+        {loading && (
+          <div className="space-y-1.5">
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>Processing…</span>
+              <span className="font-mono">{progress}%</span>
+            </div>
+            <Progress value={progress} />
+          </div>
+        )}
+
+        {rows.length > 0 && (
+          <>
+            <div className="flex flex-wrap gap-4 rounded-md border border-border bg-muted/40 p-3 text-xs">
+              <div>
+                <span className="text-muted-foreground">Total:</span>{" "}
+                <span className="font-semibold text-foreground">{rows.length}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Auto-approved:</span>{" "}
+                <span className="font-semibold text-success">{approvedCount}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Flagged for review:</span>{" "}
+                <span className="font-semibold text-warning">{flaggedCount}</span>
+              </div>
+            </div>
+            <div className="overflow-x-auto rounded-md border border-border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[38%]">Complaint</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Priority</TableHead>
+                    <TableHead>Confidence</TableHead>
+                    <TableHead>Routing</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((r, i) => (
+                    <TableRow key={i}>
+                      <TableCell className="max-w-xs truncate text-sm" title={r.complaintText}>
+                        {r.complaintText}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="whitespace-nowrap text-xs">
+                          {r.category}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={`text-xs ${priorityToneClass(r.priority)}`}>
+                          {r.priority}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {Math.round(r.confidence * 100)}%
+                      </TableCell>
+                      <TableCell>
+                        {r.routing === "AUTO-APPROVED" ? (
+                          <Badge className="gap-1 bg-success text-success-foreground hover:bg-success">
+                            <CheckCircle2 className="h-3 w-3" />
+                            Auto
+                          </Badge>
+                        ) : (
+                          <Badge className="gap-1 bg-warning text-warning-foreground hover:bg-warning">
+                            <ShieldAlert className="h-3 w-3" />
+                            Review
+                          </Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
