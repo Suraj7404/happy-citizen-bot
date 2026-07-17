@@ -358,6 +358,15 @@ export function ensureSeeded() {
     "School has not disbursed the scholarship money for this semester.",
     "Something is not right with the situation in my area, please look into it soon.",
     "There are some issues that need attention nearby, kindly do something.",
+    // Multilingual samples — Hindi, Spanish, French, German, Tamil.
+    "मेरी पेंशन पिछले तीन महीने से नहीं मिली, कृपया मदद करें।",
+    "Mi banco no ha revertido una transacción UPI incorrecta de mi cuenta.",
+    "La route près du pont est pleine de nids-de-poule et dangereuse.",
+    "Das Krankenhaus in unserer Straße hat keinen Arzt und keine Medikamente.",
+    "பள்ளியில் மாணவர் உதவித்தொகை இன்னும் வழங்கப்படவில்லை.",
+    "Naukri ke liye employer ne salary do mahine se nahi di hai.",
+    "El impuesto sobre la renta aún no ha sido devuelto tras la declaración.",
+    "L'hôpital public manque de médecin et de médicaments pour les patients.",
   ];
   for (const s of samples) {
     void classifyComplaint(s);
