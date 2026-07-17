@@ -101,6 +101,7 @@ export interface AuditRecord {
   slaDays: number;
   officer?: string;
   timestamp: string; // ISO
+  language: LanguageCode;
 }
 
 export interface ReviewItem {
@@ -110,6 +111,37 @@ export interface ReviewItem {
   priority: Priority;
   confidence: number;
   timestamp: string;
+  language: LanguageCode;
+}
+
+export type LanguageCode = "en" | "hi" | "es" | "fr" | "de" | "ta";
+
+export const LANGUAGE_LABEL: Record<LanguageCode, string> = {
+  en: "English",
+  hi: "Hindi",
+  es: "Spanish",
+  fr: "French",
+  de: "German",
+  ta: "Tamil",
+};
+
+export interface ClassMetric {
+  category: Category;
+  precision: number;
+  recall: number;
+  f1: number;
+  support: number;
+}
+
+export interface MetricsSummary {
+  accuracy: number;
+  macroPrecision: number;
+  macroRecall: number;
+  macroF1: number;
+  weightedPrecision: number;
+  weightedRecall: number;
+  weightedF1: number;
+  perClass: ClassMetric[];
 }
 
 export interface AnalyticsSnapshot {
@@ -124,6 +156,8 @@ export interface AnalyticsSnapshot {
     labels: Category[];
     matrix: number[][]; // matrix[trueIdx][predictedIdx]
   };
+  metrics: MetricsSummary;
+  languageDistribution: { language: LanguageCode; label: string; value: number }[];
 }
 
 export function priorityToneClass(priority: Priority): string {
