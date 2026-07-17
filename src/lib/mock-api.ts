@@ -265,18 +265,65 @@ export async function getAnalytics(): Promise<AnalyticsSnapshot> {
     const predIdx = labels.indexOf(a.category);
     if (predIdx === -1) continue;
     const h = hash(a.id);
-    const correct = h % 100 < 91; // ~91% accuracy on the diagonal
+    const correct = h % 100 < 93; // ~93% accuracy on the diagonal (90–95 band)
     const trueIdx = correct
       ? predIdx
       : (predIdx + 1 + ((h >> 7) % (labels.length - 1))) % labels.length;
     matrix[trueIdx][predIdx] += 1;
   }
 
+  // Derive precision / recall / F1 per class from the confusion matrix.
+  const perClass: ClassMetric[] = labels.map((cat, i) => {
+    const tp = matrix[i][i];
+    const rowSum = matrix[i].reduce((s, v) => s + v, 0); // support (true = i)
+    const colSum = matrix.reduce((s, row) => s + row[i], 0); // predicted = i
+    const precision = colSum === 0 ? 0 : tp / colSum;
+    const recall = rowSum === 0 ? 0 : tp / rowSum;
+    const f1 = precision + recall === 0 ? 0 : (2 * precision * recall) / (precision + recall);
+    return {
+      category: cat,
+      precision: Number(precision.toFixed(3)),
+      recall: Number(recall.toFixed(3)),
+      f1: Number(f1.toFixed(3)),
+      support: rowSum,
+    };
+  });
+
+  const totalSupport = perClass.reduce((s, c) => s + c.support, 0);
+  const diagonalTotal = labels.reduce((s, _c, i) => s + matrix[i][i], 0);
+  const accuracy = totalSupport === 0 ? 0 : diagonalTotal / totalSupport;
+  const active = perClass.filter((c) => c.support > 0);
+  const macroAvg = (key: "precision" | "recall" | "f1") =>
+    active.length === 0 ? 0 : active.reduce((s, c) => s + c[key], 0) / active.length;
+  const weightedAvg = (key: "precision" | "recall" | "f1") =>
+    totalSupport === 0
+      ? 0
+      : perClass.reduce((s, c) => s + c[key] * c.support, 0) / totalSupport;
+
+  const metrics: MetricsSummary = {
+    accuracy: Number(accuracy.toFixed(3)),
+    macroPrecision: Number(macroAvg("precision").toFixed(3)),
+    macroRecall: Number(macroAvg("recall").toFixed(3)),
+    macroF1: Number(macroAvg("f1").toFixed(3)),
+    weightedPrecision: Number(weightedAvg("precision").toFixed(3)),
+    weightedRecall: Number(weightedAvg("recall").toFixed(3)),
+    weightedF1: Number(weightedAvg("f1").toFixed(3)),
+    perClass,
+  };
+
+  const langMap = new Map<string, number>();
+  for (const a of auditLog) langMap.set(a.language, (langMap.get(a.language) ?? 0) + 1);
+  const languageDistribution = [...langMap.entries()].map(([language, value]) => ({
+    language: language as AuditRecord["language"],
+    label: LANGUAGE_LABEL[language as AuditRecord["language"]] ?? language,
+    value,
+  }));
+
   return {
     totalComplaints: total,
     autoApprovedPct: total === 0 ? 0 : Math.round((approved / total) * 100),
     averageConfidence: Number(avgConf.toFixed(2)),
-    averageAccuracy: Number((0.9 + (total % 3) * 0.01).toFixed(2)), // stable 0.90–0.92
+    averageAccuracy: Number(accuracy.toFixed(2)),
     averageSlaDays: Number(avgSla.toFixed(1)),
     perCategory: [...perCategoryMap.entries()].map(([category, count]) => ({ category, count })),
     priorityDistribution: (["High", "Medium", "Low"] as Priority[]).map((name) => ({
@@ -284,6 +331,8 @@ export async function getAnalytics(): Promise<AnalyticsSnapshot> {
       value: priorityMap[name],
     })),
     confusion: { labels, matrix },
+    metrics,
+    languageDistribution,
   };
 }
 
