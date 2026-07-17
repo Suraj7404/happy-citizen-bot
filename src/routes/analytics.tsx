@@ -13,7 +13,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { CheckCircle2, ClipboardList, Gauge, Target, Timer } from "lucide-react";
+import { CheckCircle2, ClipboardList, Gauge, Languages, Target, Timer } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ensureSeeded, getAnalytics } from "@/lib/mock-api";
@@ -190,6 +190,127 @@ function AnalyticsPage() {
       </div>
 
       {data && <ConfusionMatrixCard data={data} />}
+      {data && <MetricsCard data={data} />}
+      {data && <LanguageCard data={data} />}
+    </div>
+  );
+}
+
+function MetricsCard({ data }: { data: AnalyticsSnapshot }) {
+  const { metrics } = data;
+  const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
+  const rows = [
+    { label: "Macro avg", p: metrics.macroPrecision, r: metrics.macroRecall, f: metrics.macroF1 },
+    { label: "Weighted avg", p: metrics.weightedPrecision, r: metrics.weightedRecall, f: metrics.weightedF1 },
+  ];
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Classifier Metrics</CardTitle>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Precision, recall and F1 per category — derived from the multilingual confusion matrix.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-4">
+          <MiniStat label="Accuracy" value={pct(metrics.accuracy)} />
+          <MiniStat label="Macro F1" value={pct(metrics.macroF1)} />
+          <MiniStat label="Weighted F1" value={pct(metrics.weightedF1)} tone="success" />
+          <MiniStat label="Weighted Precision" value={pct(metrics.weightedPrecision)} />
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-border text-left text-muted-foreground">
+                <th className="p-2 font-medium">Category</th>
+                <th className="p-2 font-medium text-right">Precision</th>
+                <th className="p-2 font-medium text-right">Recall</th>
+                <th className="p-2 font-medium text-right">F1</th>
+                <th className="p-2 font-medium text-right">Support</th>
+              </tr>
+            </thead>
+            <tbody>
+              {metrics.perClass.map((c) => (
+                <tr key={c.category} className="border-b border-border/60">
+                  <td className="p-2 text-foreground">{c.category}</td>
+                  <td className="p-2 text-right font-mono">{pct(c.precision)}</td>
+                  <td className="p-2 text-right font-mono">{pct(c.recall)}</td>
+                  <td className="p-2 text-right font-mono">{pct(c.f1)}</td>
+                  <td className="p-2 text-right font-mono text-muted-foreground">{c.support}</td>
+                </tr>
+              ))}
+              {rows.map((row) => (
+                <tr key={row.label} className="bg-muted/40 font-medium">
+                  <td className="p-2">{row.label}</td>
+                  <td className="p-2 text-right font-mono">{pct(row.p)}</td>
+                  <td className="p-2 text-right font-mono">{pct(row.r)}</td>
+                  <td className="p-2 text-right font-mono">{pct(row.f)}</td>
+                  <td className="p-2 text-right font-mono text-muted-foreground">
+                    {metrics.perClass.reduce((s, c) => s + c.support, 0)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function LanguageCard({ data }: { data: AnalyticsSnapshot }) {
+  const total = data.languageDistribution.reduce((s, l) => s + l.value, 0);
+  const sorted = [...data.languageDistribution].sort((a, b) => b.value - a.value);
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Languages className="h-4 w-4 text-primary" />
+          Detected Languages
+        </CardTitle>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Distribution of complaint languages classified by the multilingual model.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {sorted.length === 0 && (
+          <p className="text-sm text-muted-foreground">No complaints yet.</p>
+        )}
+        {sorted.map((l) => {
+          const pct = total === 0 ? 0 : Math.round((l.value / total) * 100);
+          return (
+            <div key={l.language} className="space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-medium text-foreground">
+                  {l.label}{" "}
+                  <span className="text-muted-foreground">({l.language.toUpperCase()})</span>
+                </span>
+                <span className="font-mono text-muted-foreground">
+                  {l.value} · {pct}%
+                </span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-primary"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}
+
+function MiniStat({ label, value, tone }: { label: string; value: string; tone?: "success" }) {
+  const cls = tone === "success" ? "text-success" : "text-foreground";
+  return (
+    <div className="rounded-md border border-border bg-muted/30 p-3">
+      <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </div>
+      <div className={`mt-1 text-xl font-semibold ${cls}`}>{value}</div>
     </div>
   );
 }
