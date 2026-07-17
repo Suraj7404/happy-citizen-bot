@@ -18,7 +18,11 @@ import {
   type AnalyticsSnapshot,
   type AuditRecord,
   type Category,
+  type ClassMetric,
   type ClassifyResponse,
+  type LanguageCode,
+  LANGUAGE_LABEL,
+  type MetricsSummary,
   type Priority,
   type ReviewItem,
   type RoutingDecision,
@@ -53,15 +57,52 @@ function newId(prefix: string): string {
 }
 
 const KEYWORDS: Record<Category, string[]> = {
-  "Pension & Retirement": ["pension", "retire", "epfo", "gratuity", "pensioner"],
-  "Land & Housing": ["land", "plot", "house", "allotment", "mutation", "housing", "flat"],
-  "Financial Services": ["bank", "loan", "atm", "upi", "account", "rbi", "transaction"],
-  "Public Infrastructure": ["road", "pothole", "streetlight", "bridge", "drain", "water supply"],
-  Healthcare: ["hospital", "doctor", "medicine", "clinic", "phc", "vaccine", "ambulance"],
-  Education: ["school", "college", "scholarship", "exam", "teacher", "student"],
-  "Employment & Labour": ["salary", "wage", "job", "employer", "labour", "worker", "unemployment"],
-  "Taxation & Revenue": ["tax", "refund", "itr", "gst", "income tax", "assessment"],
+  // Multilingual keyword bank (English + Hindi transliteration + Spanish + French + German + Tamil).
+  "Pension & Retirement": [
+    "pension", "retire", "epfo", "gratuity", "pensioner",
+    "pensión", "jubilación", "retraite", "rente", "ஓய்வூதியம்",
+  ],
+  "Land & Housing": [
+    "land", "plot", "house", "allotment", "mutation", "housing", "flat",
+    "zameen", "makan", "awas", "tierra", "vivienda", "logement", "wohnung", "வீடு",
+  ],
+  "Financial Services": [
+    "bank", "loan", "atm", "upi", "account", "rbi", "transaction",
+    "banco", "préstamo", "banque", "prêt", "konto", "வங்கி", "kharedari",
+  ],
+  "Public Infrastructure": [
+    "road", "pothole", "streetlight", "bridge", "drain", "water supply",
+    "sadak", "gaddha", "carretera", "route", "straße", "சாலை", "puente",
+  ],
+  Healthcare: [
+    "hospital", "doctor", "medicine", "clinic", "phc", "vaccine", "ambulance",
+    "aspataal", "davai", "hôpital", "médecin", "krankenhaus", "மருத்துவமனை",
+  ],
+  Education: [
+    "school", "college", "scholarship", "exam", "teacher", "student",
+    "vidyalaya", "chhatravriti", "escuela", "école", "schule", "பள்ளி",
+  ],
+  "Employment & Labour": [
+    "salary", "wage", "job", "employer", "labour", "worker", "unemployment",
+    "vetan", "naukri", "mazdoor", "empleo", "salaire", "arbeit", "வேலை",
+  ],
+  "Taxation & Revenue": [
+    "tax", "refund", "itr", "gst", "income tax", "assessment",
+    "kar", "impuesto", "impôt", "steuer", "வரி",
+  ],
 };
+
+// Lightweight language detector based on unicode blocks + language-specific tokens.
+function detectLanguage(text: string): LanguageCode {
+  if (/[\u0900-\u097F]/.test(text)) return "hi";
+  if (/[\u0B80-\u0BFF]/.test(text)) return "ta";
+  const t = text.toLowerCase();
+  if (/\b(el|la|los|las|por|para|está|día|año|no recibí|hola)\b|[ñáéíóú]/.test(t)) return "es";
+  if (/\b(le|la|les|est|pour|mais|jour|année|bonjour|merci)\b|[àâçéèêëîïôùû]/.test(t)) return "fr";
+  if (/\b(der|die|das|und|nicht|ich|bitte|guten|straße)\b|[äöüß]/.test(t)) return "de";
+  if (/\b(hai|nahi|mera|meri|kripya|kar|krupa|dhanyavaad)\b/.test(t)) return "hi";
+  return "en";
+}
 
 function pickPriority(text: string): Priority {
   const t = text.toLowerCase();
@@ -115,6 +156,7 @@ function buildAuditRecord(
     slaDays: dept.slaDays,
     officer,
     timestamp: new Date().toISOString(),
+    language: detectLanguage(text),
   };
 }
 
@@ -135,6 +177,7 @@ export async function classifyComplaint(
       priority: classification.priority,
       confidence: classification.confidence,
       timestamp: new Date().toISOString(),
+      language: detectLanguage(complaintText),
     };
     reviewQueue.unshift(item);
     // Log the flagged event to the audit log as well.
