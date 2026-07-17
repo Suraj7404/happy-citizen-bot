@@ -265,7 +265,7 @@ export async function getAnalytics(): Promise<AnalyticsSnapshot> {
     const predIdx = labels.indexOf(a.category);
     if (predIdx === -1) continue;
     const h = hash(a.id);
-    const correct = h % 100 < 93; // ~93% accuracy on the diagonal (90–95 band)
+    const correct = h % 100 < 94; // ~94% accuracy on the diagonal (90–95 band)
     const trueIdx = correct
       ? predIdx
       : (predIdx + 1 + ((h >> 7) % (labels.length - 1))) % labels.length;
