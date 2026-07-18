@@ -38,7 +38,7 @@ import {
   type Priority,
   type ReviewItem,
 } from "@/lib/grievance";
-import { classifyComplaint, ensureSeeded } from "@/lib/mock-api";
+import { classifyBatch, classifyComplaint, ensureSeeded } from "@/lib/mock-api";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -268,27 +268,24 @@ function BatchClassifyCard() {
     setLoading(true);
     setRows([]);
     setProgress(0);
+    // Process in chunks so the UI stays responsive and the progress bar animates,
+    // but avoid a per-item await + emit storm (which crashed large batches).
     const out: BatchRow[] = [];
-    for (let i = 0; i < items.length; i++) {
-      const text = items[i];
-      const { classification } = await classifyComplaint(text);
-      const routing: BatchRow["routing"] =
-        classification.confidence >= CONFIDENCE_THRESHOLD ? "AUTO-APPROVED" : "HUMAN-REVIEW";
-      out.push({
-        complaintText: text,
-        category: classification.category,
-        priority: classification.priority,
-        confidence: classification.confidence,
-        routing,
-        department: DEPARTMENT_MAP[classification.category].department,
-      });
-      setProgress(Math.round(((i + 1) / items.length) * 100));
+    const CHUNK = Math.max(50, Math.ceil(items.length / 40));
+    for (let i = 0; i < items.length; i += CHUNK) {
+      const slice = items.slice(i, i + CHUNK);
+      const results = classifyBatch(slice);
+      for (const r of results) out.push(r);
+      setProgress(Math.min(100, Math.round(((i + slice.length) / items.length) * 100)));
+      // Yield to the event loop between chunks so React can repaint.
+      await new Promise((r) => setTimeout(r, 0));
     }
-    setRows(out);
+    // Cap the on-screen preview so rendering 2000 rows doesn't stall the page.
+    setRows(out.slice(0, 500));
     setLoading(false);
     const flagged = out.filter((r) => r.routing === "HUMAN-REVIEW").length;
     toast.success(
-      `Classified ${out.length} complaint${out.length === 1 ? "" : "s"} · ${flagged} flagged for review`,
+      `Classified ${out.length} complaint${out.length === 1 ? "" : "s"} · ${flagged} flagged for review${out.length > 500 ? " · showing first 500" : ""}`,
     );
   }
 
