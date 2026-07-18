@@ -13,7 +13,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { CheckCircle2, ClipboardList, Gauge, Languages, Target, Timer } from "lucide-react";
+import { CheckCircle2, ClipboardList, Gauge, Languages, Target } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ensureSeeded, getAnalytics } from "@/lib/mock-api";
@@ -78,7 +78,7 @@ function AnalyticsPage() {
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           icon={<ClipboardList className="h-4 w-4" />}
           label="Total Complaints"
@@ -100,11 +100,6 @@ function AnalyticsPage() {
           icon={<Gauge className="h-4 w-4" />}
           label="Avg Confidence"
           value={data ? `${Math.round(data.averageConfidence * 100)}%` : "—"}
-        />
-        <StatCard
-          icon={<Timer className="h-4 w-4" />}
-          label="Avg SLA (days)"
-          value={data ? data.averageSlaDays.toString() : "—"}
         />
       </div>
 
