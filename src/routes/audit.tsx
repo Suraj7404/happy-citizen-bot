@@ -81,6 +81,11 @@ function AuditLogPage() {
     );
   }, [records, query]);
 
+  // Cap the rendered rows so very large batches (thousands) don't stall the DOM.
+  const RENDER_LIMIT = 500;
+  const visible = filtered.slice(0, RENDER_LIMIT);
+  const truncated = filtered.length - visible.length;
+
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 p-4 md:p-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -104,7 +109,9 @@ function AuditLogPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">
-            {records ? `${filtered.length} record${filtered.length === 1 ? "" : "s"}` : "Records"}
+            {records
+              ? `${filtered.length} record${filtered.length === 1 ? "" : "s"}${truncated > 0 ? ` · showing latest ${RENDER_LIMIT}` : ""}`
+              : "Records"}
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -117,7 +124,7 @@ function AuditLogPage() {
           {records && filtered.length === 0 && (
             <div className="p-8 text-center text-sm text-muted-foreground">No matching records.</div>
           )}
-          {records && filtered.length > 0 && (
+          {records && visible.length > 0 && (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -134,7 +141,7 @@ function AuditLogPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.map((r) => (
+                  {visible.map((r) => (
                     <TableRow key={r.id}>
                       <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">
                         {new Date(r.timestamp).toLocaleString()}
