@@ -33,6 +33,8 @@ const auditLog: AuditRecord[] = [];
 const reviewQueue: ReviewItem[] = [];
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
+const STORAGE_KEY = "smart-grievance-router-store-v1";
+let hydrated = false;
 
 // Keep the in-memory stores bounded so a very large batch (thousands of items)
 // does not blow up React re-renders or DOM size.
@@ -43,6 +45,36 @@ function trimStores() {
   if (reviewQueue.length > MAX_REVIEW) reviewQueue.length = MAX_REVIEW;
 }
 
+function hydrateStore() {
+  if (hydrated || typeof window === "undefined") return;
+  hydrated = true;
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as { auditLog?: AuditRecord[]; reviewQueue?: ReviewItem[] };
+    auditLog.splice(0, auditLog.length, ...(parsed.auditLog ?? []));
+    reviewQueue.splice(0, reviewQueue.length, ...(parsed.reviewQueue ?? []));
+    trimStores();
+  } catch {
+    window.localStorage.removeItem(STORAGE_KEY);
+  }
+}
+
+function persistStore() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ auditLog, reviewQueue }));
+  } catch {
+    // Ignore storage quota errors; the in-memory mock store remains usable.
+  }
+}
+
+function commitStoreChange() {
+  trimStores();
+  persistStore();
+  emit();
+}
+
 export function subscribe(listener: () => void): () => void {
   listeners.add(listener);
   return () => {
@@ -51,8 +83,14 @@ export function subscribe(listener: () => void): () => void {
 }
 
 export const snapshot = {
-  audit: () => auditLog as readonly AuditRecord[],
-  review: () => reviewQueue as readonly ReviewItem[],
+  audit: () => {
+    hydrateStore();
+    return auditLog as readonly AuditRecord[];
+  },
+  review: () => {
+    hydrateStore();
+    return reviewQueue as readonly ReviewItem[];
+  },
 };
 
 // ---------- helpers ----------
@@ -191,6 +229,7 @@ function buildAuditRecord(
 export async function classifyComplaint(
   complaintText: string,
 ): Promise<{ classification: ClassifyResponse; auditRecord?: AuditRecord; queuedForReview?: ReviewItem }> {
+  hydrateStore();
   await wait(600);
   const classification = classifyLocally(complaintText);
 
@@ -210,18 +249,19 @@ export async function classifyComplaint(
     // Rewrite the audit record id to share the review item id for traceability.
     rec.id = item.id;
     auditLog.unshift(rec);
-    emit();
+    commitStoreChange();
     return { classification, queuedForReview: item };
   }
 
   const record = buildAuditRecord(complaintText, classification, "AUTO-APPROVED");
   auditLog.unshift(record);
-  emit();
+  commitStoreChange();
   return { classification, auditRecord: record };
 }
 
 // GET /api/review-queue
 export async function getReviewQueue(): Promise<ReviewItem[]> {
+  hydrateStore();
   await wait(200);
   return [...reviewQueue];
 }
@@ -233,6 +273,7 @@ export async function resolveReviewItem(
   newCategory?: Category,
   officer = "Officer Sharma",
 ): Promise<AuditRecord | null> {
+  hydrateStore();
   await wait(300);
   const idx = reviewQueue.findIndex((r) => r.id === id);
   if (idx === -1) return null;
@@ -252,15 +293,16 @@ export async function resolveReviewItem(
     existing.routingDecision = action === "override" ? "OVERRIDDEN" : "AUTO-APPROVED";
     existing.officer = officer;
     existing.status = "In-Progress";
-    emit();
+    commitStoreChange();
     return existing;
   }
-  emit();
+  commitStoreChange();
   return null;
 }
 
 // GET /api/analytics
 export async function getAnalytics(): Promise<AnalyticsSnapshot> {
+  hydrateStore();
   await wait(150);
   const total = auditLog.length;
   const approved = auditLog.filter((a) => a.routingDecision !== "HUMAN-REVIEW").length;
@@ -291,9 +333,8 @@ export async function getAnalytics(): Promise<AnalyticsSnapshot> {
     if (predIdx === -1) continue;
     const h = hash(a.id);
     const correct = h % 100 < 94; // ~94% accuracy on the diagonal (90–95 band)
-    const trueIdx = correct
-      ? predIdx
-      : (predIdx + 1 + ((h >> 7) % (labels.length - 1))) % labels.length;
+    const offset = labels.length <= 1 ? 0 : ((h >>> 7) % (labels.length - 1)) + 1;
+    const trueIdx = correct ? predIdx : (predIdx + offset) % labels.length;
     matrix[trueIdx][predIdx] += 1;
   }
 
@@ -363,6 +404,7 @@ export async function getAnalytics(): Promise<AnalyticsSnapshot> {
 
 // GET /api/audit-log
 export async function getAuditLog(): Promise<AuditRecord[]> {
+  hydrateStore();
   await wait(150);
   return [...auditLog];
 }
@@ -382,6 +424,7 @@ export interface BatchOutcome {
 }
 
 export function classifyBatch(texts: string[]): BatchOutcome[] {
+  hydrateStore();
   const outcomes: BatchOutcome[] = [];
   const newAudit: AuditRecord[] = [];
   const newReview: ReviewItem[] = [];
@@ -428,14 +471,15 @@ export function classifyBatch(texts: string[]): BatchOutcome[] {
   // Prepend newest-first, then bound the store size.
   auditLog.unshift(...newAudit.reverse());
   reviewQueue.unshift(...newReview.reverse());
-  trimStores();
-  emit();
+  commitStoreChange();
   return outcomes;
 }
 
 // ---------- seed demo data so dashboards aren't empty on first load ----------
 let seeded = false;
 export function ensureSeeded() {
+  hydrateStore();
+  if (auditLog.length > 0 || reviewQueue.length > 0) return;
   if (seeded) return;
   seeded = true;
   const samples: string[] = [

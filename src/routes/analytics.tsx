@@ -192,7 +192,16 @@ function AnalyticsPage() {
 }
 
 function MetricsCard({ data }: { data: AnalyticsSnapshot }) {
-  const { metrics } = data;
+  const metrics = data.metrics ?? {
+    accuracy: 0,
+    macroPrecision: 0,
+    macroRecall: 0,
+    macroF1: 0,
+    weightedPrecision: 0,
+    weightedRecall: 0,
+    weightedF1: 0,
+    perClass: [],
+  };
   const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
   const rows = [
     { label: "Macro avg", p: metrics.macroPrecision, r: metrics.macroRecall, f: metrics.macroF1 },
@@ -254,8 +263,9 @@ function MetricsCard({ data }: { data: AnalyticsSnapshot }) {
 }
 
 function LanguageCard({ data }: { data: AnalyticsSnapshot }) {
-  const total = data.languageDistribution.reduce((s, l) => s + l.value, 0);
-  const sorted = [...data.languageDistribution].sort((a, b) => b.value - a.value);
+  const languages = data.languageDistribution ?? [];
+  const total = languages.reduce((s, l) => s + l.value, 0);
+  const sorted = [...languages].sort((a, b) => b.value - a.value);
   return (
     <Card>
       <CardHeader>
@@ -311,7 +321,11 @@ function MiniStat({ label, value, tone }: { label: string; value: string; tone?:
 }
 
 function ConfusionMatrixCard({ data }: { data: AnalyticsSnapshot }) {
-  const { labels, matrix } = data.confusion;
+  const labels = data.confusion?.labels ?? [];
+  const sourceMatrix = data.confusion?.matrix ?? [];
+  const matrix = labels.map((_, r) =>
+    labels.map((_, c) => Number(sourceMatrix[r]?.[c] ?? 0)),
+  );
   const rowTotals = matrix.map((row) => row.reduce((s, v) => s + v, 0));
   const max = Math.max(1, ...matrix.flat());
 
@@ -353,7 +367,7 @@ function ConfusionMatrixCard({ data }: { data: AnalyticsSnapshot }) {
           <tbody>
             {labels.map((rowLabel, r) => {
               const total = rowTotals[r];
-              const correct = matrix[r][r];
+              const correct = matrix[r]?.[r] ?? 0;
               const recall = total === 0 ? 0 : Math.round((correct / total) * 100);
               return (
                 <tr key={rowLabel}>
@@ -364,7 +378,7 @@ function ConfusionMatrixCard({ data }: { data: AnalyticsSnapshot }) {
                     <div className="max-w-[160px] truncate">{rowLabel}</div>
                   </th>
                   {labels.map((colLabel, c) => {
-                    const v = matrix[r][c];
+                    const v = matrix[r]?.[c] ?? 0;
                     const intensity = v === 0 ? 0 : 0.12 + (v / max) * 0.78;
                     const diag = r === c;
                     const bg = diag

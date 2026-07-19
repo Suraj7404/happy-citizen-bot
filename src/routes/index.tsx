@@ -268,18 +268,9 @@ function BatchClassifyCard() {
     setLoading(true);
     setRows([]);
     setProgress(0);
-    // Process in chunks so the UI stays responsive and the progress bar animates,
-    // but avoid a per-item await + emit storm (which crashed large batches).
-    const out: BatchRow[] = [];
-    const CHUNK = Math.max(50, Math.ceil(items.length / 40));
-    for (let i = 0; i < items.length; i += CHUNK) {
-      const slice = items.slice(i, i + CHUNK);
-      const results = classifyBatch(slice);
-      for (const r of results) out.push(r);
-      setProgress(Math.min(100, Math.round(((i + slice.length) / items.length) * 100)));
-      // Yield to the event loop between chunks so React can repaint.
-      await new Promise((r) => setTimeout(r, 0));
-    }
+    // Run the store update once so Analytics/Audit never refresh against a half-built batch.
+    const out = classifyBatch(items);
+    setProgress(100);
     // Cap the on-screen preview so rendering 2000 rows doesn't stall the page.
     setRows(out.slice(0, 500));
     setLoading(false);
