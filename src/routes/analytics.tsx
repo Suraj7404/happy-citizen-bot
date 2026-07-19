@@ -192,7 +192,16 @@ function AnalyticsPage() {
 }
 
 function MetricsCard({ data }: { data: AnalyticsSnapshot }) {
-  const { metrics } = data;
+  const metrics = data.metrics ?? {
+    accuracy: 0,
+    macroPrecision: 0,
+    macroRecall: 0,
+    macroF1: 0,
+    weightedPrecision: 0,
+    weightedRecall: 0,
+    weightedF1: 0,
+    perClass: [],
+  };
   const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
   const rows = [
     { label: "Macro avg", p: metrics.macroPrecision, r: metrics.macroRecall, f: metrics.macroF1 },
@@ -254,8 +263,9 @@ function MetricsCard({ data }: { data: AnalyticsSnapshot }) {
 }
 
 function LanguageCard({ data }: { data: AnalyticsSnapshot }) {
-  const total = data.languageDistribution.reduce((s, l) => s + l.value, 0);
-  const sorted = [...data.languageDistribution].sort((a, b) => b.value - a.value);
+  const languages = data.languageDistribution ?? [];
+  const total = languages.reduce((s, l) => s + l.value, 0);
+  const sorted = [...languages].sort((a, b) => b.value - a.value);
   return (
     <Card>
       <CardHeader>
