@@ -291,9 +291,8 @@ export async function getAnalytics(): Promise<AnalyticsSnapshot> {
     if (predIdx === -1) continue;
     const h = hash(a.id);
     const correct = h % 100 < 94; // ~94% accuracy on the diagonal (90–95 band)
-    const trueIdx = correct
-      ? predIdx
-      : (predIdx + 1 + ((h >> 7) % (labels.length - 1))) % labels.length;
+    const offset = labels.length <= 1 ? 0 : ((h >>> 7) % (labels.length - 1)) + 1;
+    const trueIdx = correct ? predIdx : (predIdx + offset) % labels.length;
     matrix[trueIdx][predIdx] += 1;
   }
 
